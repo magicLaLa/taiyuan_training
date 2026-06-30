@@ -320,16 +320,36 @@ fn process_single_room(client: &Client, user_id: &str, room_id: &str, upload_fil
 
         if status_ok && is_finish == 1 {
             println!("  \u{2705} 房间 {} 完成 -- status=10000, isFinish=1", room_id);
-            let upload_url = match api::upload_public_file(
-                client,
-                "https://gdyx.bnu.edu.cn/api-web/upload/uploadPublicFile",
-                upload_file_path,
-            ) {
-                Ok(url) => url,
-                Err(e) => {
-                    eprintln!("uploadPublicFile 请求失败: {}", e);
+            let upload_url = {
+                let mut last_err = String::new();
+                let mut success = false;
+                let mut result = String::new();
+                for attempt in 1..=3 {
+                    match api::upload_public_file(
+                        client,
+                        "https://gdyx.bnu.edu.cn/api-web/upload/uploadPublicFile",
+                        upload_file_path,
+                    ) {
+                        Ok(url) => {
+                            result = url;
+                            success = true;
+                            break;
+                        }
+                        Err(e) => {
+                            last_err = format!("{}", e);
+                            eprintln!("uploadPublicFile 请求失败 (第{}/3 次): {}", attempt, last_err);
+                            if attempt < 3 {
+                                println!("等待 10 秒后重试...");
+                                thread::sleep(Duration::from_secs(10));
+                            }
+                        }
+                    }
+                }
+                if !success {
+                    eprintln!("uploadPublicFile 重试 3 次均失败: {}", last_err);
                     process::exit(1);
                 }
+                result
             };
             println!("  📤 上传成功：{}", upload_url);
             break;
